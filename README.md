@@ -14,6 +14,13 @@ The test images that will be provided to you are in color so you will need to co
 
 Python, C/C++, Matlab and Java are the recommended programming languages. If you intend to use a different language, send me an email first. You are not allowed to use any built-in library functions for any of the steps that you are required to implement.
 
+<!--- --->
+:information_desk_person:
+:information_desk_person:
+:information_desk_person:
+:information_desk_person:
+:information_desk_person:
+
 * You are not allowed to use the Convolution or Cross-Correlation built-in library function of any programming language. You have to write your own function. 
 * You are allowed to use  Read, Write, and Display images library functions. 
 * There are 3 sets of test images attached. Each image is available in both .jpg and .raw formats. See Project Description for a description of the .raw format. TestImage1c and Testimage2c are of dimension 756 rows x 1008 columns, and Testimage3 has dimension 413 rows x 550 columns. 
