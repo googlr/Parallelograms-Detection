@@ -67,11 +67,11 @@ print("Step 2: Sobel's operator applied.")
 
 #################################################################
 #(2) detect straight line segments using the Hough Transform
-theta_step_size = 1
+theta_step_size = 5
 p_step_size = 1
 theta_MAX_VALUE = 360
 p_MAX_VALUE = int( math.sqrt(row*row + col*col) )
-accumulator_array = np.zeros((theta_MAX_VALUE/theta_step_size, p_MAX_VALUE),dtype='uint8')
+accumulator_array = np.zeros((theta_MAX_VALUE/theta_step_size, p_MAX_VALUE/p_step_size),dtype='uint8')
 #Compute the accumulator array
 imgMag_row, imgMag_col = imgMag.shape
 for i in range(0, imgMag_row):
@@ -85,14 +85,38 @@ for i in range(0, imgMag_row):
 			p_estimate = i*math.cos(theta_radians) + j*math.sin(theta_radians)
 			#Update the accumulator array
 			accu_x = theta/theta_step_size
-			accu_y = int( p_estimate )
+			accu_y = int( p_estimate/p_step_size )
 			accumulator_array[ accu_x ][ accu_y ] += 1
 			# next theta
 			theta = theta + theta_step_size
-print(accumulator_array.shape)
-print( np.amax(accumulator_array) )
-plt.imshow(accumulator_array, cmap='gray')
-plt.show()
+
+max_accumulator = np.amax(accumulator_array)
+print( max_accumulator )
+print( "Step 3: Hough Transform applied.")
+#plt.imshow(accumulator_array, cmap='gray')
+#plt.show()
+
+
+#################################################################
+#(3) detect parallelograms from the straight-line segments detected in step (2).
+#the de-Houghed image (using a relative threshold of 50%)
+relative_threshold_ratio = 0.5
+relative_threshold = max_accumulator * relative_threshold_ratio
+accu_row, accu_col = accumulator_array.shape
+peak_list = []
+for i in range(0, accu_row):
+	for j in range(0, accu_col):
+		#apply the threshold filter
+		accumulator_i_j = accumulator_array[i][j]
+		accumulator_array[i][j] = accumulator_i_j if accumulator_i_j >= relative_threshold else 0
+		if accumulator_i_j >= relative_threshold:
+			peak_p = (j + 0.5) * p_step_size
+			peak_theta = (i + 0.5) * theta_step_size
+			peak_list.append([peak_theta, peak_p])
+
+peak = np.array( peak_list )
+print(peak)
+
 
 
 #Saving filtered image to new file
