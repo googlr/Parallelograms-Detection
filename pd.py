@@ -76,19 +76,18 @@ accumulator_array = np.zeros((theta_MAX_VALUE/theta_step_size, p_MAX_VALUE/p_ste
 imgMag_row, imgMag_col = imgMag.shape
 for i in range(0, imgMag_row):
 	for j in range(0, imgMag_col):
-		if( imgMag[i][j] == 0):
-			continue
-		# p = x*cos(theta) + y*sin(theta)
-		theta = 0
-		while theta < 360:
-			theta_radians = math.radians(theta + theta_step_size/2.0)
-			p_estimate = i*math.cos(theta_radians) + j*math.sin(theta_radians)
-			#Update the accumulator array
-			accu_x = theta/theta_step_size
-			accu_y = int( p_estimate/p_step_size )
-			accumulator_array[ accu_x ][ accu_y ] += 1
-			# next theta
-			theta = theta + theta_step_size
+		if( imgMag[i][j] > 0):
+			# p = x*cos(theta) + y*sin(theta)
+			theta = 0
+			while theta < 360:
+				theta_radians = math.radians(theta + theta_step_size/2.0)
+				p_estimate = i*math.cos(theta_radians) + j*math.sin(theta_radians)
+				#Update the accumulator array
+				accu_x = theta/theta_step_size
+				accu_y = int( p_estimate/p_step_size )
+				accumulator_array[ accu_x ][ accu_y ] += 1
+				# next theta
+				theta = theta + theta_step_size
 
 max_accumulator = np.amax(accumulator_array)
 print( max_accumulator )
@@ -115,7 +114,41 @@ for i in range(0, accu_row):
 			peak_list.append([peak_theta, peak_p])
 
 peak = np.array( peak_list )
-print(peak)
+#print(peak)
+edge_map = np.zeros( (row, col), dtype='uint8')
+#Initialize to edge map to 255
+for i in range(0, row):
+	for j in range(0, col):
+		edge_map[i][j] = 255
+
+#Copy the magnitude array imgMag to edge_map
+for i in range(0, row-2):
+	for j in range(0, col-2):
+		if imgMag[i][j] > 0:
+			edge_map[i+1][j+1] = 0
+
+def xy_in_range(x,y):
+	return True if ( x >= 0 and x < row and y >=0 and y <= col ) else False
+#Draw the lines in edge_map
+peak_row, peak_col = peak.shape
+for i in range(0, peak_row):
+	i_theta = peak[i][0]
+	i_p = peak[i][1]
+	i_theta_radians = math.radians( i_theta )
+	if (i_theta == 0 or i_theta == 180):
+		i_x = i_p / math.cos( i_theta_radians )
+		for j in range(0, col):
+			if xy_in_range(i_x, j):
+				edge_map[i_x][j] = 0
+	else:
+		for i_x in range(0, row):
+			i_y = ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians )
+			if xy_in_range(i_x, i_y):
+				edge_map[i_x][i_y] = 0
+
+
+plt.imshow(edge_map, cmap='gray')
+plt.show()
 
 
 
