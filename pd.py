@@ -98,8 +98,8 @@ print( "Step 3: Hough Transform applied.")
 
 #################################################################
 #(3) detect parallelograms from the straight-line segments detected in step (2).
-#the de-Houghed image (using a relative threshold of 50%)
-relative_threshold_ratio = 0.5
+#the de-Houghed image (using a relative threshold of 40%)
+relative_threshold_ratio = 0.4
 relative_threshold = max_accumulator * relative_threshold_ratio
 accu_row, accu_col = accumulator_array.shape
 peak_list = []
@@ -142,7 +142,7 @@ for i in range(0, peak_row):
 				edge_map[i_x][j] = 0
 	else:
 		for i_x in range(0, row):
-			i_y = ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians )
+			i_y = int( ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians ) )i
 			if xy_in_range(i_x, i_y):
 				edge_map[i_x][i_y] = 0
 
