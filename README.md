@@ -20,6 +20,7 @@ Python, C/C++, Matlab and Java are the recommended programming languages. If you
 :information_desk_person:
 :information_desk_person:
 :information_desk_person:
+:information_desk_person:
 
 * You are not allowed to use the Convolution or Cross-Correlation built-in library function of any programming language. You have to write your own function. 
 * You are allowed to use  Read, Write, and Display images library functions. 
