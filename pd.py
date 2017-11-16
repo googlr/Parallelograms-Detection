@@ -44,7 +44,7 @@ def sobels_operator(img):
 
 
 row, col = 756, 1008
-filename = "TestImage1.raw"
+filename = "TestImage2.raw"
 #Read Image
 testImage = np.fromfile(filename,dtype='uint8',sep="")
 
@@ -214,6 +214,7 @@ for key in peak_dict:
 	for val in peak_dict[ key ]:
 		peak_list_filtered.append( [ key, val ] )
 
+print("peak_list_filtered: ")
 print( peak_list_filtered )
 peak = np.array( peak_list_filtered )
 
@@ -233,6 +234,8 @@ for i in range(0, row-2):
 
 def xy_in_range(x,y):
 	return True if ( x >= 0 and x < row and y >=0 and y < col ) else False
+
+
 #Draw the lines in edge_map
 peak_row, peak_col = peak.shape
 for i in range(0, peak_row):
@@ -272,19 +275,135 @@ for keys in para_keys:
 	p2_list = list( it.combinations( parallel_peak_dict[ theta2 ], 2 ) )
 	for p1 in p1_list:
 		for p2 in p2_list:
-			para_gram_options.append( keys + p1 + p2 )
+			para_gram_options.append( list(keys) + list(p1) + list(p2) )
 
 #print( para_gram_options )
 # Compute valid parallelogram
+
+# Get a copy of imgMag
+mag_map_copy = np.zeros( (row, col), dtype='uint8')
+distance_threshold = 8
+#Initialize to edge map to 255
+for i in range(0, row):
+	for j in range(0, col):
+		mag_map_copy[i][j] = 255
+#Copy the magnitude array imgMag to mag_map_copy
+for i in range(0, row-2):
+	for j in range(0, col-2):
+		if imgMag[i][j] > 0:
+			mag_map_copy[i+1][j+1] = 0
+
+def test_sketch_dot(x,y):
+	dot_size = 5
+	if xy_in_range(x,y):
+		for i in range( (-1)* dot_size, dot_size + 1 ):
+			for j in range( (-1)*dot_size, dot_size + 1):
+				x_ij = i + x # (x,y) with offset i, j
+				y_ij = j + y
+				if xy_in_range(x_ij, y_ij):
+					#print("sketch")
+					mag_map_copy[ int(x_ij) ][ int(y_ij) ] = 100
+
+def draw_line(i_theta, i_p):
+	#Draw the lines in edge_map
+	i_theta_radians = math.radians( i_theta )
+	if (i_theta == 0 or i_theta == 180):
+		i_x = i_p / math.cos( i_theta_radians )
+		for j in range(0, col):
+			if xy_in_range(i_x, j):
+				edge_map[i_x][j] = 0
+	else:
+		for i_x in range(0, row):
+			i_y = int( ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians ) )
+			if xy_in_range(i_x, i_y):
+				edge_map[i_x][i_y] = 0
+
+
 for line in para_gram_options:
+	draw_line( line[0], line[2])
+	draw_line( line[0], line[3])
+	draw_line( line[1], line[4])
+	draw_line( line[1], line[5])
+
+# Compute the intersection of two lines
+def intersection( theta1, p1, theta2, p2):
+	theta1_radians = math.radians(theta1)
+	theta2_radians = math.radians(theta2)
+	x = ( p2*math.sin(theta1_radians) - p1*math.sin(theta2_radians) ) / math.sin( theta1_radians - theta2_radians )
+	y = ( p1*math.cos(theta1_radians) - p2*math.cos(theta2_radians) ) / math.sin( theta1_radians - theta2_radians )
+	#test_sketch_dot(x,y) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	return [x,y]
+
+
+def get_y_from_x( i_theta, i_p, i_x ):
+	i_theta_radians = math.radians( i_theta )
+	if (i_theta == 0 or i_theta == 180):
+		return 0 # special case, but does not matter
+	else:
+		i_y = int( ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians ) )
+		return i_y
+
+def near_edge_line(x,y):
+	if xy_in_range(x,y):
+		for i in range( (-1)* distance_threshold, distance_threshold + 1 ):
+			for j in range( (-1)*distance_threshold, distance_threshold + 1):
+				x_ij = i + x # (x,y) with offset i, j
+				y_ij = j + y
+				if xy_in_range(x_ij, y_ij):
+					if mag_map_copy[ x_ij ][ y_ij ] == 0:
+						return True
+				else:
+					continue
+		return False
+	else:
+		#print("Warning: invalid (x,y) in near_edge_line(x,y).")
+		return False
+
+# Count the number of point on (theta1, p1_1) restricted by (theta2, p2_1) and (theta2, p2_2)
+def counting_points_on_line_segment(theta1, p1_1, theta2, p2_1, p2_2):
+	x1, y1 = intersection( theta1, p1_1, theta2, p2_1 )
+	x2, y2 = intersection( theta1, p1_1, theta2, p2_2 )
+	points_count = 0
+	if xy_in_range(x1,y1) and xy_in_range(x2,y2):
+		start_x = int( min( x1, x2 ) )
+		end_x = int( max( x1, x2 ) )
+		for x in range( start_x, end_x ):
+			y = get_y_from_x( theta1, p1_1, x)
+			if near_edge_line(x,y):
+				points_count = points_count + 1
+		return points_count
+	else:
+		return 0
+
+def valid_parallelogram( line ):
+	if len( line ) != 6:
+		print("Warning: invalid data in valid_parallelogram().")
 	theta1 = line[0]
 	theta2 = line[1]
 	p1_1 = line[2]
 	p1_2 = line[3]
 	p2_1 = line[4]
 	p2_2 = line[5]
-	valid_parallelogram
+	points_line1 = counting_points_on_line_segment(theta1, p1_1, theta2, p2_1, p2_2)
+	points_line2 = counting_points_on_line_segment(theta1, p1_2, theta2, p2_1, p2_2)
+	points_line3 = counting_points_on_line_segment(theta2, p2_1, theta1, p1_1, p1_2)
+	points_line4 = counting_points_on_line_segment(theta2, p2_2, theta1, p1_1, p1_2)
+
+	return points_line1 + points_line2 + points_line3 + points_line4
+
+def draw_parallelogram( line ):
 
 
+valid_parallelogram_list = []
+points_on_parallelogram = []
+for line in para_gram_options:
+	points_on_parallelogram.append( valid_parallelogram( line ) )
+	if valid_parallelogram( line ) > 0:
+		draw_parallelogram( line )
+	#	valid_parallelogram_list.append( line )
+print("Points_on_parallelogram = ")
+print( points_on_parallelogram )
+plt.imshow(mag_map_copy, cmap='gray')
+plt.show()
 
 #Saving filtered image to new file
