@@ -43,7 +43,7 @@ def sobels_operator(img):
 
 
 row, col = 756, 1008
-filename = "TestImage2.raw"
+filename = "TestImage1.raw"
 #Read Image
 testImage = np.fromfile(filename,dtype='uint8',sep="")
 
@@ -212,7 +212,7 @@ peak_list_filtered = []
 for key in peak_dict:
 	for val in peak_dict[ key ]:
 		peak_list_filtered.append( [ key, val ] )
-		
+
 print( peak_list_filtered )
 peak = np.array( peak_list_filtered )
 
