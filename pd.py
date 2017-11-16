@@ -11,6 +11,7 @@
 import numpy as np
 from matplotlib import pylab as plt
 import math
+import itertools as it
 
 
 # convert them into grayscale images by using the formula 
@@ -53,7 +54,7 @@ print("Step 1: Convert image to grayscale.")
 #print grayImage.shape
 
 #Display Image
-#plt.imshow(grayImage)
+#plt.imshow(grayImage, cmap = 'gray')
 #plt.show()
 
 #################################################################
@@ -62,7 +63,7 @@ print("Step 1: Convert image to grayscale.")
 #– Enhancement
 imgMag = sobels_operator(grayImage)
 print("Step 2: Sobel's operator applied.")
-#plt.imshow(imgMag)
+#plt.imshow(imgMag, cmap = 'gray')
 #plt.show()
 
 #################################################################
@@ -250,8 +251,39 @@ for i in range(0, peak_row):
 				edge_map[i_x][i_y] = 0
 
 
-plt.imshow(edge_map, cmap='gray')
-plt.show()
+#plt.imshow(edge_map, cmap='gray')
+#plt.show()
+
+#############################################################################################
+# Extract line segments
+parallel_peak_dict = {}
+for key in peak_dict:
+	if len( peak_dict[ key ]) < 2: # less than 2 lines, there is no parallelograms
+		continue
+	else:
+		parallel_peak_dict[ key ] = peak_dict[ key ]
+
+# Compute possible parallelogram options
+para_gram_options = []
+para_keys = list( it.combinations( parallel_peak_dict.keys(), 2) )
+for keys in para_keys:
+	theta1, theta2 = keys
+	p1_list = list( it.combinations( parallel_peak_dict[ theta1 ], 2 ) )
+	p2_list = list( it.combinations( parallel_peak_dict[ theta2 ], 2 ) )
+	for p1 in p1_list:
+		for p2 in p2_list:
+			para_gram_options.append( keys + p1 + p2 )
+
+#print( para_gram_options )
+# Compute valid parallelogram
+for line in para_gram_options:
+	theta1 = line[0]
+	theta2 = line[1]
+	p1_1 = line[2]
+	p1_2 = line[3]
+	p2_1 = line[4]
+	p2_2 = line[5]
+	valid_parallelogram
 
 
 
