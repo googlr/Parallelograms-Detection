@@ -113,7 +113,110 @@ for i in range(0, accu_row):
 			peak_theta = (i + 0.5) * theta_step_size
 			peak_list.append([peak_theta, peak_p])
 
-peak = np.array( peak_list )
+
+# using local-maxima threshold
+#accu_row, accu_col = accumulator_array.shape
+#peak_list = []
+#for i in range(1, accu_row - 1):
+#	for j in range(1, accu_col -1):
+#		#apply the threshold filter
+#		if (accumulator_array[i][j] >= accumulator_array[i-1][j] and accumulator_array[i][j] >= accumulator_array[i+1][j] and accumulator_array[i][j] >= accumulator_array[i][j-1] and accumulator_array[i][j] >= accumulator_array[i][j+1]):
+#			peak_p = (j + 0.5) * p_step_size
+#			peak_theta = (i + 0.5) * theta_step_size
+#			peak_list.append([peak_theta, peak_p])
+#
+
+
+#################################################################################################
+# Filter overlaping lines
+filter_step_size = 5
+
+# Compute average of a list of int
+def average_p( p_filter_list ):
+	list_len = len( p_filter_list )
+	if list_len == 0:
+		print("Warning: empty list.")
+	p_sum = 0.0
+	for p in p_filter_list:
+		p_sum  = p_sum + p
+
+	return p_sum/list_len
+
+# Cluster a list of int to clustered list
+def cluster_list( p_list ):
+	p_list = sorted( p_list )
+	list_len = len( p_list )
+	clustered_list = []
+	if list_len == 0:
+		return clustered_list
+	p_val = p_list[0]
+	p_filter_list = []
+	for i in range(0, list_len):
+		if math.fabs( p_val - p_list[i] ) < filter_step_size:
+			p_filter_list.append( p_list[i] )
+		else:
+			p_new_average = average_p( p_filter_list )
+			clustered_list.append( p_new_average )
+			# update p_val and clear p_filter_list
+			p_val = p_list[i]
+			p_filter_list[:] = []
+			p_filter_list.append( p_list[i] )
+
+	# clear p_filter_list
+	if len( p_filter_list ) != 0:
+		p_new_average = average_p( p_filter_list )
+		clustered_list.append( p_new_average )
+	return clustered_list
+
+
+#peak_list_filtered = []
+#filter_theta = peak_list[0][0]
+#filter_p_list = []
+#peak_list_len = len( peak_list )
+#for i in range(0, peak_list_len ):
+#	i_theta = peak_list[i][0]
+#	i_p = peak_list[i][1]
+#	if i_theta == filter_theta:
+#		filter_p_list.append(i_p)
+#		continue
+#	else:
+#		cluster_p_list = cluster_list( filter_p_list )
+#		for p in cluster_p_list:
+#			peak_list_filtered.append( [ filter_theta, p ] )
+		#update filter_theta and clear filter_p_list
+#		filter_theta = i_theta
+#		filter_p_list[:] = []
+#		filter_p_list.append( i_p )
+#
+	# clear filter_p_list
+#	if len( filter_p_list ) != 0 :
+#		cluster_p_list = cluster_list( filter_p_list )
+#		for p in cluster_p_list:
+#			peak_list_filtered.append( [ filter_theta, p ] )
+
+
+# use dictionary to filter peaks
+peak_dict = {}
+for line in peak_list:
+    if line[0] in peak_dict:
+        # append the new number to the existing array at this slot
+        peak_dict[line[0]].append(line[1])
+    else:
+        # create a new array in this slot
+        peak_dict[line[0]] = [line[1]]
+
+for key in peak_dict:
+	peak_dict[ key ] = cluster_list( peak_dict[key] )
+
+peak_list_filtered = []
+for key in peak_dict:
+	for val in peak_dict[ key ]:
+		peak_list_filtered.append( [ key, val ] )
+		
+print( peak_list_filtered )
+peak = np.array( peak_list_filtered )
+
+########################################################################################
 #print(peak)
 edge_map = np.zeros( (row, col), dtype='uint8')
 #Initialize to edge map to 255
@@ -128,7 +231,7 @@ for i in range(0, row-2):
 			edge_map[i+1][j+1] = 0
 
 def xy_in_range(x,y):
-	return True if ( x >= 0 and x < row and y >=0 and y <= col ) else False
+	return True if ( x >= 0 and x < row and y >=0 and y < col ) else False
 #Draw the lines in edge_map
 peak_row, peak_col = peak.shape
 for i in range(0, peak_row):
@@ -142,7 +245,7 @@ for i in range(0, peak_row):
 				edge_map[i_x][j] = 0
 	else:
 		for i_x in range(0, row):
-			i_y = int( ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians ) )i
+			i_y = int( ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians ) )
 			if xy_in_range(i_x, i_y):
 				edge_map[i_x][i_y] = 0
 
