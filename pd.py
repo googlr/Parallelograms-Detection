@@ -30,21 +30,38 @@ def sobels_operator(img):
 	img_row, img_col = img.shape
 	for i in range(1, img_row  - 1):
 		for j in range(1, img_col - 1):
+			#compute edge magnitude using the formula
 			g_x = (img[i-1][j+1] + 2*img[i][j+1] + img[i+1][j+1] 
 				- img[i-1][j-1] - 2*img[i][j-1] - img[i+1][j-1])
 			g_y = (img[i-1][j-1] + 2*img[i-1][j] + img[i-1][j+1] 
 				- img[i+1][j-1] - 2*img[i+1][j] - img[i+1][j+1])
 			mag_i_j = math.sqrt(g_x*g_x + g_y*g_y)
-			# T=225
-			mag_i_j = mag_i_j if mag_i_j >= 225 else 0
-			#mag_i_j = mag_i_j if mag_i_j <= 225 else 255
-			mag.append(mag_i_j)
+			mag.append( int(mag_i_j) )
 
-	return np.array(mag).reshape([img_row-2, img_col-2])
+	# normalize the magnitude values to lie within the range [0,255].
+	min_mag = min( mag )
+	max_mag = max( mag )
+	mag_normalized = []
+	for val in mag:
+		mag_normalized.append( int( (val - min_mag)*255/(max_mag - min_mag) ) )
+	# Save the normalized gradient magnitue
+	normalized_gradient_magnitue_as_a_image = np.array( mag_normalized ).reshape([img_row-2, img_col-2])
+	plt.imshow( normalized_gradient_magnitue_as_a_image, cmap = 'gray')
+	#plt.show()
+	plt.savefig("normalized_gradient_magnitue_as_a_image.png")
+
+	# filter: threshold T=225
+	T = 225 # gradient magnitue threshold 
+	mag_normalized_filtered = []
+	for val in mag_normalized:
+		mag_normalized_filtered.append( val if val >= T else 0)
+	#mag_i_j = mag_i_j if mag_i_j >= 225 else 0
+	#mag_i_j = mag_i_j if mag_i_j <= 225 else 255
+	return np.array( mag_normalized_filtered ).reshape([img_row-2, img_col-2])
 
 
 row, col = 756, 1008
-filename = "TestImage2.raw"
+filename = "TestImage1.raw"
 #Read Image
 testImage = np.fromfile(filename,dtype='uint8',sep="")
 
@@ -63,8 +80,9 @@ print("Step 1: Convert image to grayscale.")
 #– Enhancement
 imgMag = sobels_operator(grayImage)
 print("Step 2: Sobel's operator applied.")
-#plt.imshow(imgMag, cmap = 'gray')
+plt.imshow(imgMag, cmap = 'gray')
 #plt.show()
+plt.savefig("edges_detected_in_image.png")
 
 #################################################################
 #(2) detect straight line segments using the Hough Transform
@@ -392,6 +410,10 @@ def valid_parallelogram( line ):
 	return points_line1 + points_line2 + points_line3 + points_line4
 
 def draw_parallelogram( line ):
+	draw_line( line[0], line[2])
+	draw_line( line[0], line[3])
+	draw_line( line[1], line[4])
+	draw_line( line[1], line[5])
 
 
 valid_parallelogram_list = []
