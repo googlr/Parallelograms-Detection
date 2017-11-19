@@ -9,10 +9,19 @@
 # Next, manually choose a threshold value to produce a binary edge map.
 
 import numpy as np
+import matplotlib
 from matplotlib import pylab as plt
 import math
 import itertools as it
+import cv2
 
+row, col = 756, 1008 # Size of the image
+filename = "TestImage1.raw"
+T = 125 # Threshold in the normalized gradient magnitue
+relative_threshold_ratio = 0.4 #the de-Houghed image (using a relative threshold of 40%)
+distance_threshold = 8 # Threshold distance to determin if a point on a line
+
+points_on_line_threshold = 20 # the least points on line to be considered to be a valid line
 
 # convert them into grayscale images by using the formula 
 # luminance = 0.30R + 0.59G + 0.11B, 
@@ -53,7 +62,6 @@ def sobels_operator(img):
 
 
 	# filter: threshold T=225
-	T = 125 # gradient magnitue threshold 
 	mag_normalized_filtered = []
 	for val in mag_normalized:
 		mag_normalized_filtered.append( val if val >= T else 0)
@@ -62,8 +70,6 @@ def sobels_operator(img):
 	return np.array( mag_normalized_filtered ).reshape([img_row-2, img_col-2])
 
 
-row, col = 756, 1008
-filename = "TestImage1.raw"
 #Read Image
 testImage = np.fromfile(filename,dtype='uint8',sep="")
 
@@ -125,7 +131,6 @@ print( "Step 3: Hough Transform applied.")
 #################################################################
 #(3) detect parallelograms from the straight-line segments detected in step (2).
 #the de-Houghed image (using a relative threshold of 40%)
-relative_threshold_ratio = 0.4
 relative_threshold = max_accumulator * relative_threshold_ratio
 accu_row, accu_col = accumulator_array.shape
 peak_list = []
@@ -351,7 +356,6 @@ for key in para_keys:
 
 # Get a copy of imgMag
 mag_map_copy = np.zeros( (row, col), dtype='uint8')
-distance_threshold = 8
 #Initialize to edge map to 255
 for i in range(0, row):
 	for j in range(0, col):
@@ -362,7 +366,7 @@ for i in range(0, row-2):
 		if imgMag[i][j] > 0:
 			mag_map_copy[i+1][j+1] = 0
 
-def test_sketch_dot(x,y):
+def sketch_dot_on_map(x,y, dot_map, sketch_val):
 	dot_size = 5
 	if xy_in_range(x,y):
 		for i in range( (-1)* dot_size, dot_size + 1 ):
@@ -371,16 +375,15 @@ def test_sketch_dot(x,y):
 				y_ij = j + y
 				if xy_in_range(x_ij, y_ij):
 					#print("sketch")
-					mag_map_copy[ int(x_ij) ][ int(y_ij) ] = 100
-
+					dot_map[ int(x_ij) ][ int(y_ij) ] = sketch_val
 
 # Compute the intersection of two lines
 def intersection( theta1, p1, theta2, p2):
 	theta1_radians = math.radians(theta1)
 	theta2_radians = math.radians(theta2)
 	x = ( p2*math.sin(theta1_radians) - p1*math.sin(theta2_radians) ) / math.sin( theta1_radians - theta2_radians )
-	y = ( p1*math.cos(theta1_radians) - p2*math.cos(theta2_radians) ) / math.sin( theta1_radians - theta2_radians )
-	#test_sketch_dot(x,y) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+	y = ( p1*math.cos(theta2_radians) - p2*math.cos(theta1_radians) ) / math.sin( theta1_radians - theta2_radians )
+	# test_sketch_dot(x,y) #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	return [x,y]
 
 
@@ -405,26 +408,45 @@ def near_edge_line(x,y):
 					continue
 		return False
 	else:
-		#print("Warning: invalid (x,y) in near_edge_line(x,y).")
 		return False
 
 # Count the number of point on (theta1, p1_1) restricted by (theta2, p2_1) and (theta2, p2_2)
-def counting_points_on_line_segment(theta1, p1_1, theta2, p2_1, p2_2):
-	x1, y1 = intersection( theta1, p1_1, theta2, p2_1 )
-	x2, y2 = intersection( theta1, p1_1, theta2, p2_2 )
+def counting_points_on_line_segment( theta1,p1, theta3,p3, theta4,p4 ):
+	x1, y1 = intersection( theta1, p1, theta3, p3 )
+	x2, y2 = intersection( theta1, p1, theta4, p4 )
+	# test_sketch_dot(x1,y1)
+	# test_sketch_dot(x2,y2)
+	# plt.imshow(mag_map_copy, cmap='gray')
+	# plt.show()
+	# plt.close()
+	print([x1,y1,x2,y2])
 	points_count = 0
 	if xy_in_range(x1,y1) and xy_in_range(x2,y2):
 		start_x = int( min( x1, x2 ) )
 		end_x = int( max( x1, x2 ) )
 		for x in range( start_x, end_x ):
-			y = get_y_from_x( theta1, p1_1, x)
+			y = get_y_from_x( theta1, p1, x)
 			if near_edge_line(x,y):
 				points_count = points_count + 1
 		return points_count
 	else:
 		return 0
 
+def draw_parallelogram( line ):
+	draw_line( line[0], line[1])
+	draw_line( line[2], line[3])
+	draw_line( line[4], line[5])
+	draw_line( line[6], line[7])
+
+
 def valid_parallelogram( line ):
+	# print("Validating parallelogram:")
+	# print( line )
+	# draw_parallelogram( line )
+	# plt.imshow(edge_map, cmap='gray')
+	# plt.show()
+	# plt.close()
+
 	if len( line ) != 8:
 		print("Warning: invalid data in valid_parallelogram().")
 	theta1 = line[0]
@@ -436,35 +458,106 @@ def valid_parallelogram( line ):
 	theta4 = line[6]
 	p4 = line[7]
 	points_line1 = counting_points_on_line_segment( theta1,p1, theta3,p3, theta4,p4 )
+	# draw_line( theta1,p1 )
+	# draw_line( theta3,p3 )
+	# draw_line( theta4,p4 )
+	# plt.imshow(edge_map, cmap='gray')
+	# plt.show()
+	# plt.close()
+	# print("Points on line:")
+	# print( points_line1 )
 	points_line2 = counting_points_on_line_segment( theta2,p2, theta3,p3, theta4,p4 )
 	points_line3 = counting_points_on_line_segment( theta3,p3, theta1,p1, theta2,p2 )
 	points_line4 = counting_points_on_line_segment( theta4,p4, theta1,p1, theta2,p2 )
 
-	return points_line1 + points_line2 + points_line3 + points_line4
+	if points_line1 > points_on_line_threshold and points_line2 > points_on_line_threshold and points_line3 > points_on_line_threshold and points_line4 > points_on_line_threshold :
+		return points_line1 + points_line2 + points_line3 + points_line4
+	else: # There is no enough points on at least one line segment
+		return 0
 
-def draw_parallelogram( line ):
-	draw_line( line[0], line[2])
-	draw_line( line[0], line[3])
-	draw_line( line[1], line[4])
-	draw_line( line[1], line[5])
+# Mask of parallelograms
+mask_parallelogram = np.ones( (row, col), dtype='uint8') #  1 is not on parallelograms, 0 is on parallelograms
+
+def add_line_mask(i_theta, i_p, x1, y1, x2, y2): # add line mask from (x1,y1) to (x2,y2) on line( i_theta, i_p)
+	x_min = int( min( [x1, x2] ) )
+	x_max = int( max( [x1, x2] ) )
+	# Draw the lines in mask
+	i_theta_radians = math.radians( i_theta )
+	if (i_theta == 0 or i_theta == 180): # x1 == x2
+		y_min = int( min( [y1, y2] ) )
+		y_max = int( max( [y1, y2] ) )
+		i_x = x_min
+		for j in range(y_min, y_max + 1):
+			if xy_in_range( i_x, j):
+				mask_parallelogram[ i_x ][j] = 0
+	else:
+		for i_x in range(x_min, x_max):
+			i_y = int( ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians ) )
+			if xy_in_range(i_x, i_y):
+				mask_parallelogram[i_x][i_y] = 0
+
+def add_parallelogram_mask( line ):
+	theta1 = line[0]
+	p1 = line[1]
+	theta2 = line[2]
+	p2 = line[3]
+	theta3 = line[4]
+	p3 = line[5]
+	theta4 = line[6]
+	p4 = line[7]
+	x1, y1 = intersection( theta1,p1, theta3,p3 )
+	x2, y2 = intersection( theta2,p2, theta3,p3 )
+	x3, y3 = intersection( theta2,p2, theta4,p4 )
+	x4, y4 = intersection( theta1,p1, theta4,p4 )
+	add_line_mask( theta3,p3, x1,y1, x2,y2 )
+	add_line_mask( theta2,p3, x2,y2, x3,y3 )
+	add_line_mask( theta4,p4, x3,y3, x4,y4 )
+	add_line_mask( theta1,p1, x4,y4, x1,y1 )
+	# Sketch on end points
+	sketch_dot_on_map(x1,y1, mask_parallelogram, 0)
+	sketch_dot_on_map(x2,y2, mask_parallelogram, 0)
+	sketch_dot_on_map(x3,y3, mask_parallelogram, 0)
+	sketch_dot_on_map(x4,y4, mask_parallelogram, 0)
+	# Print end points
+	print([x1,y1,x2,y2,x3,y3,x4,y4])
+
 
 
 valid_parallelogram_list = []
 points_on_parallelogram = []
 for line in para_gram_options:
-	print("Validating parallelogram:")
-	print( line )
 	points_on_line = valid_parallelogram( line )
 	points_on_parallelogram.append( points_on_line )
-	draw_parallelogram( line )
 	if points_on_line > 0:
-		draw_parallelogram( line )
+		#draw_parallelogram( line )
+		add_parallelogram_mask( line )
+		# plt.imshow(edge_map, cmap='gray')
+		# plt.show()
+		# plt.close()
+
 	#	valid_parallelogram_list.append( line )
-print("Points_on_parallelogram = ")
-print( points_on_parallelogram )
-plt.imshow(edge_map, cmap='gray')
-plt.show()
-plt.close()
+
+# print("Points_on_parallelogram = ")
+# print( points_on_parallelogram )
+
+# Use the mask
+masked_image_list = []
+for i in range(0, row):
+	for j in range(0, col):
+		# Use the mask
+		masked_image_list.append( grayImage[i][j] * mask_parallelogram[i][j] )
+		# masked_image_list.append( testImage[ i*col + j*3 + 0 ] * mask_parallelogram[i][j] )
+		# masked_image_list.append( testImage[ i*col + j*3 + 1 ] * mask_parallelogram[i][j] )
+		# masked_image_list.append( testImage[ i*col + j*3 + 2 ] * mask_parallelogram[i][j] )
+
+
+maskedImage = np.array(masked_image_list).reshape([row, col])
+
+# plt.imshow(maskedImage, cmap = "gray")
+# #plt.show()
+# plt.savefig("maskedImage.png")
+# plt.close()
+matplotlib.image.imsave('maskedImage.png', maskedImage)
 
 
 #Saving filtered image to new file
