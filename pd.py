@@ -49,9 +49,11 @@ def sobels_operator(img):
 	plt.imshow( normalized_gradient_magnitue_as_a_image, cmap = 'gray')
 	#plt.show()
 	plt.savefig("normalized_gradient_magnitue_as_a_image.png")
+	plt.close()
+
 
 	# filter: threshold T=225
-	T = 225 # gradient magnitue threshold 
+	T = 125 # gradient magnitue threshold 
 	mag_normalized_filtered = []
 	for val in mag_normalized:
 		mag_normalized_filtered.append( val if val >= T else 0)
@@ -73,6 +75,8 @@ print("Step 1: Convert image to grayscale.")
 #Display Image
 #plt.imshow(grayImage, cmap = 'gray')
 #plt.show()
+#plt.close()
+
 
 #################################################################
 #(1) detect edges using the Sobel’s operator
@@ -83,6 +87,8 @@ print("Step 2: Sobel's operator applied.")
 plt.imshow(imgMag, cmap = 'gray')
 #plt.show()
 plt.savefig("edges_detected_in_image.png")
+plt.close()
+
 
 #################################################################
 #(2) detect straight line segments using the Hough Transform
@@ -113,6 +119,7 @@ print( max_accumulator )
 print( "Step 3: Hough Transform applied.")
 #plt.imshow(accumulator_array, cmap='gray')
 #plt.show()
+#plt.close()
 
 
 #################################################################
@@ -131,6 +138,7 @@ for i in range(0, accu_row):
 			peak_p = (j + 0.5) * p_step_size
 			peak_theta = (i + 0.5) * theta_step_size
 			peak_list.append([peak_theta, peak_p])
+
 
 
 # using local-maxima threshold
@@ -214,7 +222,9 @@ def cluster_list( p_list ):
 #			peak_list_filtered.append( [ filter_theta, p ] )
 
 
-# use dictionary to filter peaks
+
+
+# Use dictionary to filter peaks
 peak_dict = {}
 for line in peak_list:
     if line[0] in peak_dict:
@@ -232,6 +242,8 @@ for key in peak_dict:
 	for val in peak_dict[ key ]:
 		peak_list_filtered.append( [ key, val ] )
 
+print("peak_list: ")
+print( peak_list )
 print("peak_list_filtered: ")
 print( peak_list_filtered )
 peak = np.array( peak_list_filtered )
@@ -253,12 +265,8 @@ for i in range(0, row-2):
 def xy_in_range(x,y):
 	return True if ( x >= 0 and x < row and y >=0 and y < col ) else False
 
-
-#Draw the lines in edge_map
-peak_row, peak_col = peak.shape
-for i in range(0, peak_row):
-	i_theta = peak[i][0]
-	i_p = peak[i][1]
+def draw_line(i_theta, i_p):
+	# Draw the lines in edge_map
 	i_theta_radians = math.radians( i_theta )
 	if (i_theta == 0 or i_theta == 180):
 		i_x = i_p / math.cos( i_theta_radians )
@@ -272,30 +280,73 @@ for i in range(0, peak_row):
 				edge_map[i_x][i_y] = 0
 
 
-#plt.imshow(edge_map, cmap='gray')
-#plt.show()
+#Draw the lines in edge_map
+# print("Peak includes:")
+# print( peak )
+# peak_row, peak_col = peak.shape
+# for i in range(0, peak_row):
+# 	i_theta = peak[i][0]
+# 	i_p = peak[i][1]
+# 	draw_line( i_theta, i_p )
+# 	print("add line:")
+# 	print( peak[i] )
+# 	plt.imshow(edge_map, cmap='gray')
+# 	plt.show()
+# 	plt.close()
 
 #############################################################################################
 # Extract line segments
+
+def get_bias_key_list_in_peak_dict( key ):
+	bias_keys = [ key ]
+	peak_dict_keys = peak_dict.keys()
+	key1 = key
+	while (key1 + theta_step_size) in  peak_dict_keys:
+		key1 = key1 + theta_step_size
+		bias_keys.append( key1 )
+
+	key2 = key
+	while (key2 - theta_step_size) in  peak_dict_keys:
+		key2 = key2 - theta_step_size
+		bias_keys.append( key2 )
+
+	return bias_keys
+
+# Correct bias of in Theta by allowing fluctions in theta when generating parallel line pairs
 parallel_peak_dict = {}
 for key in peak_dict:
-	if len( peak_dict[ key ]) < 2: # less than 2 lines, there is no parallelograms
-		continue
-	else:
-		parallel_peak_dict[ key ] = peak_dict[ key ]
+	bias_key_list = get_bias_key_list_in_peak_dict( key )
+	min_key = min( bias_key_list ) # Use the min_key to represent the similar keys
+	parallel_peak_dict[ min_key ] = []
+	for bias_key in bias_key_list:
+		bias_key_val_list = peak_dict[ bias_key ]
+		for bias_key_val in bias_key_val_list:
+			parallel_peak_dict[ min_key ].append( ( bias_key, bias_key_val ) )
 
+print("parallel_peak_dict:")
+print( parallel_peak_dict )
 # Compute possible parallelogram options
 para_gram_options = []
 para_keys = list( it.combinations( parallel_peak_dict.keys(), 2) )
-for keys in para_keys:
-	theta1, theta2 = keys
-	p1_list = list( it.combinations( parallel_peak_dict[ theta1 ], 2 ) )
-	p2_list = list( it.combinations( parallel_peak_dict[ theta2 ], 2 ) )
-	for p1 in p1_list:
-		for p2 in p2_list:
-			para_gram_options.append( list(keys) + list(p1) + list(p2) )
+for key in para_keys:
+	key1, key2 = key
+	key1_list = list( it.combinations( parallel_peak_dict[ key1 ], 2 ) )
+	key2_list = list( it.combinations( parallel_peak_dict[ key2 ], 2 ) )
+	for comb1 in key1_list:
+		for comb2 in key2_list:
+			theta1 = comb1[0][0]
+			p1 = comb1[0][1]
+			theta2 = comb1[1][0]
+			p2 = comb1[1][1]
+			theta3 = comb2[0][0]
+			p3 = comb2[0][1]
+			theta4 = comb2[1][0]
+			p4 = comb2[1][1]
+			para_gram_options.append( (theta1,p1, theta2,p2, theta3,p3, theta4,p4) )
 
-#print( para_gram_options )
+# print("para_gram_options:")
+# print( para_gram_options )
+
 # Compute valid parallelogram
 
 # Get a copy of imgMag
@@ -322,26 +373,6 @@ def test_sketch_dot(x,y):
 					#print("sketch")
 					mag_map_copy[ int(x_ij) ][ int(y_ij) ] = 100
 
-def draw_line(i_theta, i_p):
-	#Draw the lines in edge_map
-	i_theta_radians = math.radians( i_theta )
-	if (i_theta == 0 or i_theta == 180):
-		i_x = i_p / math.cos( i_theta_radians )
-		for j in range(0, col):
-			if xy_in_range(i_x, j):
-				edge_map[i_x][j] = 0
-	else:
-		for i_x in range(0, row):
-			i_y = int( ( i_p - i_x * math.cos( i_theta_radians ) )/ math.sin( i_theta_radians ) )
-			if xy_in_range(i_x, i_y):
-				edge_map[i_x][i_y] = 0
-
-
-for line in para_gram_options:
-	draw_line( line[0], line[2])
-	draw_line( line[0], line[3])
-	draw_line( line[1], line[4])
-	draw_line( line[1], line[5])
 
 # Compute the intersection of two lines
 def intersection( theta1, p1, theta2, p2):
@@ -394,18 +425,20 @@ def counting_points_on_line_segment(theta1, p1_1, theta2, p2_1, p2_2):
 		return 0
 
 def valid_parallelogram( line ):
-	if len( line ) != 6:
+	if len( line ) != 8:
 		print("Warning: invalid data in valid_parallelogram().")
 	theta1 = line[0]
-	theta2 = line[1]
-	p1_1 = line[2]
-	p1_2 = line[3]
-	p2_1 = line[4]
-	p2_2 = line[5]
-	points_line1 = counting_points_on_line_segment(theta1, p1_1, theta2, p2_1, p2_2)
-	points_line2 = counting_points_on_line_segment(theta1, p1_2, theta2, p2_1, p2_2)
-	points_line3 = counting_points_on_line_segment(theta2, p2_1, theta1, p1_1, p1_2)
-	points_line4 = counting_points_on_line_segment(theta2, p2_2, theta1, p1_1, p1_2)
+	p1 = line[1]
+	theta2 = line[2]
+	p2 = line[3]
+	theta3 = line[4]
+	p3 = line[5]
+	theta4 = line[6]
+	p4 = line[7]
+	points_line1 = counting_points_on_line_segment( theta1,p1, theta3,p3, theta4,p4 )
+	points_line2 = counting_points_on_line_segment( theta2,p2, theta3,p3, theta4,p4 )
+	points_line3 = counting_points_on_line_segment( theta3,p3, theta1,p1, theta2,p2 )
+	points_line4 = counting_points_on_line_segment( theta4,p4, theta1,p1, theta2,p2 )
 
 	return points_line1 + points_line2 + points_line3 + points_line4
 
@@ -419,13 +452,19 @@ def draw_parallelogram( line ):
 valid_parallelogram_list = []
 points_on_parallelogram = []
 for line in para_gram_options:
-	points_on_parallelogram.append( valid_parallelogram( line ) )
-	if valid_parallelogram( line ) > 0:
+	print("Validating parallelogram:")
+	print( line )
+	points_on_line = valid_parallelogram( line )
+	points_on_parallelogram.append( points_on_line )
+	draw_parallelogram( line )
+	if points_on_line > 0:
 		draw_parallelogram( line )
 	#	valid_parallelogram_list.append( line )
 print("Points_on_parallelogram = ")
 print( points_on_parallelogram )
-plt.imshow(mag_map_copy, cmap='gray')
+plt.imshow(edge_map, cmap='gray')
 plt.show()
+plt.close()
+
 
 #Saving filtered image to new file
