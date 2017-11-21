@@ -13,11 +13,15 @@ import matplotlib
 from matplotlib import pylab as plt
 import math
 import itertools as it
-import cv2
+# import cv2
+# from skimage.feature import peak_local_max
 
-row, col = 756, 1008 # Size of the image
-filename = "TestImage1.raw"
-T = 125 # Threshold in the normalized gradient magnitue
+
+# row, col = 756, 1008 # Size of the image
+row, col = 413, 550
+filename = "TestImage3.raw"
+T = 25 # Threshold in the normalized gradient magnitue
+local_maxima_window_size = 10 # neighborhood_size
 relative_threshold_ratio = 0.4 #the de-Houghed image (using a relative threshold of 40%)
 distance_threshold = 8 # Threshold distance to determin if a point on a line
 
@@ -33,6 +37,32 @@ def cvt2grayscale(img):
 		grayImage.append(luminance)
 
 	return np.array(grayImage)
+
+def smooth_image_with_Gaussian_filter( img ):
+	kernel = (0.006, 0.061, 0.242, 0.383, 0.242, 0.061, 0.006)
+	kernel_size = len( kernel )
+	border_offset = ( kernel_size - 1 ) / 2
+
+	img_copy = np.copy( img )
+	for i in range( 0, row ):
+		# Keep border values as they are
+		for j in range( border_offset, col - border_offset ):
+			img_copy_ij = 0
+			for k in range( (-1)*border_offset, border_offset + 1 ):
+				img_copy_ij += img[ i ][ j+k ] * kernel[ border_offset + k ]
+			img_copy[i][j] = img_copy_ij
+
+	img_copy_copy = np.copy( img_copy )
+	# Keep border values as they are
+	for i in range( border_offset, row - border_offset ):
+		for j in range( 0, col ):
+			img_copy_copy_ij = 0
+			for k in range( (-1)*border_offset, border_offset + 1 ):
+				img_copy_copy_ij += img_copy[ i+k ][ j ] * kernel[ border_offset + k ]
+			img_copy_copy[i][j] = img_copy_copy_ij
+
+	return img_copy_copy
+
 
 def sobels_operator(img):
 	mag = []
@@ -78,11 +108,74 @@ grayImage = cvt2grayscale(testImage).reshape([row, col])
 print("Step 1: Convert image to grayscale.")
 #print grayImage.shape
 
+# Smooth_image_with_Gaussian_filter
+grayImage = smooth_image_with_Gaussian_filter( grayImage )
 #Display Image
-#plt.imshow(grayImage, cmap = 'gray')
+plt.imshow(grayImage, cmap = 'gray')
 #plt.show()
-#plt.close()
+plt.savefig("image_smoothed_with_Gaussian_filter.png")
+plt.close()
 
+# Compute gradient magnitude and gradient angle
+gradient_magnitude = np.zeros( (row,col), dtype='uint8' )
+gradient_angle = np.zeros( (row,col), dtype='uint8' )
+quantize_angle_of_the_gradient = np.zeros( (row,col), dtype='uint8' )
+
+def quantize_angle_of_the_gradient_to_four_sectors( angle ):
+	# Double check the parameter
+	if (angle < 0 or angle > 360):
+		print("Warning: invalid parameter in quantize_angle_of_the_gradient_to_four_sectors(angle).")
+		return 4
+	if ( angle <= 0 + 22.5 or 
+		(angle >= 180 - 22.5 and angle <= 180 + 22.5 ) or
+		angle >= 315 + 22.5):
+		return 0
+	if ( (angle > 45 - 22.5 and angle < 45 + 22.5) or 
+		(angle > 225 - 22.5 and angle < 225 + 22.5 )):
+		return 1
+	if ( (angle >= 90 - 22.5 and angle <= 90 + 22.5) or 
+		(angle >= 270 - 22.5 and angle <= 270 + 22.5 )):
+		return 2
+	if ( (angle > 135 - 22.5 and angle < 135 + 22.5) or 
+		(angle > 315 - 22.5 and angle < 315 + 22.5 )):
+		return 3
+
+def compute_gradient_magnitude_and_gradient_angle( image_smoothed ):
+	for i in range( 1, row ):
+		for j in range( 1, col ):
+			Gx = (image_smoothed[i][j] + image_smoothed[i-1][j] 
+				- image_smoothed[i][j-1] - image_smoothed[i-1][j-1])
+			Gy = (image_smoothed[i-1][j-1] + image_smoothed[i-1][j] 
+				- image_smoothed[i][j-1] - image_smoothed[i][j])
+			gradient_magnitude[i][j] = math.sqrt( Gx*Gx + Gy*Gy )
+			if Gx == 0:
+				gradient_angle[i][j] = 90 if Gy > 0 else 270
+			else:
+				gradient_angle[i][j] = math.degrees( math.atan2( Gy, Gx ) )
+
+			quantize_angle_of_the_gradient[i][j] = quantize_angle_of_the_gradient_to_four_sectors( gradient_angle[i][j] )
+
+grayImage = compute_gradient_magnitude_and_gradient_angle( grayImage )
+# Non-maxima Suppression
+# 	Thin magnitude image by using a 3×3 window
+for i in range( 1, row -1 ):
+	for j in range( 1, col -1 ):
+		sector_ij = quantize_angle_of_the_gradient[i][j]
+		if sector_ij == 0:
+			gradient_magnitude[i][j] = gradient_magnitude[i][j] if (gradient_magnitude[i][j] >= gradient_magnitude[i][j-1] and gradient_magnitude[i][j] >= gradient_magnitude[i][j+1]) else 0 
+		elif sector_ij == 1:
+			gradient_magnitude[i][j] = gradient_magnitude[i][j] if (gradient_magnitude[i][j] >= gradient_magnitude[i-1][j+1] and gradient_magnitude[i][j] >= gradient_magnitude[i+1][j-1]) else 0 
+		elif sector_ij == 2:
+			gradient_magnitude[i][j] = gradient_magnitude[i][j] if (gradient_magnitude[i][j] >= gradient_magnitude[i-1][j] and gradient_magnitude[i][j] >= gradient_magnitude[i+1][j]) else 0 
+		elif sector_ij == 3:
+			gradient_magnitude[i][j] = gradient_magnitude[i][j] if (gradient_magnitude[i][j] >= gradient_magnitude[i-1][j-1] and gradient_magnitude[i][j] >= gradient_magnitude[i+1][j+1]) else 0 
+		else:
+			print("Warning: invalid sector in Non-maxima Suppression.")
+
+plt.imshow(gradient_magnitude, cmap = 'gray')
+#plt.show()
+plt.savefig("edges_of_gradient_magnitude_after_Non_maxima_Surpression.png")
+plt.close()
 
 #################################################################
 #(1) detect edges using the Sobel’s operator
@@ -123,45 +216,61 @@ for i in range(0, imgMag_row):
 max_accumulator = np.amax(accumulator_array)
 print( max_accumulator )
 print( "Step 3: Hough Transform applied.")
-#plt.imshow(accumulator_array, cmap='gray')
-#plt.show()
-#plt.close()
+# plt.imshow(accumulator_array, cmap='gray')
+# plt.show()
+# plt.close()
 
 
 #################################################################
 #(3) detect parallelograms from the straight-line segments detected in step (2).
 #the de-Houghed image (using a relative threshold of 40%)
-relative_threshold = max_accumulator * relative_threshold_ratio
 accu_row, accu_col = accumulator_array.shape
 peak_list = []
+
+# Relative threshold filtering
+relative_threshold = max_accumulator * relative_threshold_ratio
 for i in range(0, accu_row):
 	for j in range(0, accu_col):
 		#apply the threshold filter
 		accumulator_i_j = accumulator_array[i][j]
 		accumulator_array[i][j] = accumulator_i_j if accumulator_i_j >= relative_threshold else 0
-		if accumulator_i_j >= relative_threshold:
+		# if accumulator_i_j >= relative_threshold:
+		# 	peak_p = (j + 0.5) * p_step_size
+		# 	peak_theta = (i + 0.5) * theta_step_size
+		# 	peak_list.append([peak_theta, peak_p])
+
+# plt.imshow(accumulator_array, cmap='gray')
+# plt.show()
+# plt.close()
+
+# Using local-maxima threshold
+# 	With a threshold window of 3x3
+window_size = local_maxima_window_size
+
+def accumulator_is_local_maxima( i, j ):
+	if accumulator_array[i][j] == 0: # already surpressed
+		return False
+	for s_i in range( (-1)*window_size, window_size + 1 ):
+		for s_j in range( (-1)*window_size, window_size + 1 ):
+			if accumulator_array[i][j] < accumulator_array[ i + s_i ][ j + s_j ]: # Notice that there might be more than one maxima
+				return False
+	return True
+
+for i in range( window_size, accu_row - window_size):
+	for j in range( window_size, accu_col - window_size):
+		#apply the threshold filter
+		if accumulator_is_local_maxima( i, j ):
 			peak_p = (j + 0.5) * p_step_size
 			peak_theta = (i + 0.5) * theta_step_size
 			peak_list.append([peak_theta, peak_p])
 
-
-
-# using local-maxima threshold
-#accu_row, accu_col = accumulator_array.shape
-#peak_list = []
-#for i in range(1, accu_row - 1):
-#	for j in range(1, accu_col -1):
-#		#apply the threshold filter
-#		if (accumulator_array[i][j] >= accumulator_array[i-1][j] and accumulator_array[i][j] >= accumulator_array[i+1][j] and accumulator_array[i][j] >= accumulator_array[i][j-1] and accumulator_array[i][j] >= accumulator_array[i][j+1]):
-#			peak_p = (j + 0.5) * p_step_size
-#			peak_theta = (i + 0.5) * theta_step_size
-#			peak_list.append([peak_theta, peak_p])
-#
+print("peak_list: ")
+print( peak_list )
 
 
 #################################################################################################
 # Filter overlaping lines
-filter_step_size = 5
+filter_step_size = theta_step_size
 
 # Compute average of a list of int
 def average_p( p_filter_list ):
@@ -201,34 +310,6 @@ def cluster_list( p_list ):
 	return clustered_list
 
 
-#peak_list_filtered = []
-#filter_theta = peak_list[0][0]
-#filter_p_list = []
-#peak_list_len = len( peak_list )
-#for i in range(0, peak_list_len ):
-#	i_theta = peak_list[i][0]
-#	i_p = peak_list[i][1]
-#	if i_theta == filter_theta:
-#		filter_p_list.append(i_p)
-#		continue
-#	else:
-#		cluster_p_list = cluster_list( filter_p_list )
-#		for p in cluster_p_list:
-#			peak_list_filtered.append( [ filter_theta, p ] )
-		#update filter_theta and clear filter_p_list
-#		filter_theta = i_theta
-#		filter_p_list[:] = []
-#		filter_p_list.append( i_p )
-#
-	# clear filter_p_list
-#	if len( filter_p_list ) != 0 :
-#		cluster_p_list = cluster_list( filter_p_list )
-#		for p in cluster_p_list:
-#			peak_list_filtered.append( [ filter_theta, p ] )
-
-
-
-
 # Use dictionary to filter peaks
 peak_dict = {}
 for line in peak_list:
@@ -247,8 +328,6 @@ for key in peak_dict:
 	for val in peak_dict[ key ]:
 		peak_list_filtered.append( [ key, val ] )
 
-print("peak_list: ")
-print( peak_list )
 print("peak_list_filtered: ")
 print( peak_list_filtered )
 peak = np.array( peak_list_filtered )
@@ -288,16 +367,12 @@ def draw_line(i_theta, i_p):
 #Draw the lines in edge_map
 # print("Peak includes:")
 # print( peak )
-# peak_row, peak_col = peak.shape
-# for i in range(0, peak_row):
-# 	i_theta = peak[i][0]
-# 	i_p = peak[i][1]
-# 	draw_line( i_theta, i_p )
-# 	print("add line:")
-# 	print( peak[i] )
-# 	plt.imshow(edge_map, cmap='gray')
-# 	plt.show()
-# 	plt.close()
+for line in peak_list:
+	draw_line( line[0], line[1] )
+plt.imshow( edge_map, cmap = "gray")
+plt.show()
+# plt.savefig("maskedImage.png")
+plt.close()
 
 #############################################################################################
 # Extract line segments
@@ -328,8 +403,8 @@ for key in peak_dict:
 		for bias_key_val in bias_key_val_list:
 			parallel_peak_dict[ min_key ].append( ( bias_key, bias_key_val ) )
 
-print("parallel_peak_dict:")
-print( parallel_peak_dict )
+# print("parallel_peak_dict:")
+# print( parallel_peak_dict )
 # Compute possible parallelogram options
 para_gram_options = []
 para_keys = list( it.combinations( parallel_peak_dict.keys(), 2) )
@@ -419,7 +494,7 @@ def counting_points_on_line_segment( theta1,p1, theta3,p3, theta4,p4 ):
 	# plt.imshow(mag_map_copy, cmap='gray')
 	# plt.show()
 	# plt.close()
-	print([x1,y1,x2,y2])
+	# print([x1,y1,x2,y2])
 	points_count = 0
 	if xy_in_range(x1,y1) and xy_in_range(x2,y2):
 		start_x = int( min( x1, x2 ) )
@@ -525,6 +600,8 @@ def add_parallelogram_mask( line ):
 
 valid_parallelogram_list = []
 points_on_parallelogram = []
+print("Length of para_gram_options:")
+print( len( para_gram_options ) )
 for line in para_gram_options:
 	points_on_line = valid_parallelogram( line )
 	points_on_parallelogram.append( points_on_line )
