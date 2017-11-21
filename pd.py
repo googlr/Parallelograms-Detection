@@ -15,13 +15,16 @@ import math
 import itertools as it
 # import cv2
 # from skimage.feature import peak_local_max
+from photutils_detection_core import find_peaks
+# import sys
 
 
-# row, col = 756, 1008 # Size of the image
-row, col = 413, 550
-filename = "TestImage3.raw"
+row, col = 756, 1008 # Size of the image
+# row, col = 413, 550
+filename = "TestImage2.raw"
 T = 25 # Threshold in the normalized gradient magnitue
-local_maxima_window_size = 10 # neighborhood_size
+Canny_Edge_Detector_threshold = 10
+local_maxima_window_size = 3 # neighborhood_size
 relative_threshold_ratio = 0.4 #the de-Houghed image (using a relative threshold of 40%)
 distance_threshold = 8 # Threshold distance to determin if a point on a line
 
@@ -38,6 +41,7 @@ def cvt2grayscale(img):
 
 	return np.array(grayImage)
 
+# Gausssion smoothing: https://homepages.inf.ed.ac.uk/rbf/HIPR2/gsmooth.htm
 def smooth_image_with_Gaussian_filter( img ):
 	kernel = (0.006, 0.061, 0.242, 0.383, 0.242, 0.061, 0.006)
 	kernel_size = len( kernel )
@@ -109,11 +113,11 @@ print("Step 1: Convert image to grayscale.")
 #print grayImage.shape
 
 # Smooth_image_with_Gaussian_filter
-grayImage = smooth_image_with_Gaussian_filter( grayImage )
+grayImage_smoothed = smooth_image_with_Gaussian_filter( grayImage )
 #Display Image
-plt.imshow(grayImage, cmap = 'gray')
+plt.imshow(grayImage_smoothed, cmap = 'gray')
 #plt.show()
-plt.savefig("image_smoothed_with_Gaussian_filter.png")
+plt.savefig("grayImage_smoothed_with_Gaussian_filter.png")
 plt.close()
 
 # Compute gradient magnitude and gradient angle
@@ -155,7 +159,7 @@ def compute_gradient_magnitude_and_gradient_angle( image_smoothed ):
 
 			quantize_angle_of_the_gradient[i][j] = quantize_angle_of_the_gradient_to_four_sectors( gradient_angle[i][j] )
 
-grayImage = compute_gradient_magnitude_and_gradient_angle( grayImage )
+compute_gradient_magnitude_and_gradient_angle( grayImage_smoothed )
 # Non-maxima Suppression
 # 	Thin magnitude image by using a 3×3 window
 for i in range( 1, row -1 ):
@@ -172,30 +176,37 @@ for i in range( 1, row -1 ):
 		else:
 			print("Warning: invalid sector in Non-maxima Suppression.")
 
+for i in range( 1, row -1 ):
+	for j in range( 1, col -1 ):
+		gradient_magnitude[i][j] = gradient_magnitude[i][j] if gradient_magnitude[i][j] >= Canny_Edge_Detector_threshold else 0
+
+print("Step 2: Canny Edge Detecter applied.")
 plt.imshow(gradient_magnitude, cmap = 'gray')
-#plt.show()
-plt.savefig("edges_of_gradient_magnitude_after_Non_maxima_Surpression.png")
+# plt.show()
+plt.savefig("edges_detected_by_Canny_Edge_Detector.png")
 plt.close()
+
 
 #################################################################
 #(1) detect edges using the Sobel’s operator
 #– Filtering
 #– Enhancement
-imgMag = sobels_operator(grayImage)
-print("Step 2: Sobel's operator applied.")
-plt.imshow(imgMag, cmap = 'gray')
-#plt.show()
-plt.savefig("edges_detected_in_image.png")
-plt.close()
+# imgMag = sobels_operator(grayImage)
+# print("Step 2: Sobel's operator applied.")
+# plt.imshow(imgMag, cmap = 'gray')
+# #plt.show()
+# plt.savefig("edges_detected_in_image.png")
+# plt.close()
 
+imgMag = gradient_magnitude
 
 #################################################################
 #(2) detect straight line segments using the Hough Transform
-theta_step_size = 5
+theta_step_size = 3
 p_step_size = 1
 theta_MAX_VALUE = 360
 p_MAX_VALUE = int( math.sqrt(row*row + col*col) )
-accumulator_array = np.zeros((theta_MAX_VALUE/theta_step_size, p_MAX_VALUE/p_step_size),dtype='uint8')
+accumulator_array = np.zeros((theta_MAX_VALUE/theta_step_size + 1, p_MAX_VALUE/p_step_size + 1),dtype='uint8')
 #Compute the accumulator array
 imgMag_row, imgMag_col = imgMag.shape
 for i in range(0, imgMag_row):
@@ -243,30 +254,68 @@ for i in range(0, accu_row):
 # plt.show()
 # plt.close()
 
+table = find_peaks( accumulator_array, relative_threshold )
+# print(table)
+peaks_found = []
+for i in range( 0, len(table[0]) ):
+	table_x = table[1][i]
+	table_y = table[0][i]
+	peaks_found.append( [ (table_x + 0.5) * theta_step_size, (table_y + 0.5) * p_step_size ])
+	# print( accumulator_array[ table_x ][ table_y ] )
+
+print( peaks_found )
+
+
 # Using local-maxima threshold
 # 	With a threshold window of 3x3
 window_size = local_maxima_window_size
+
+def xy_in_range_of_accumulator_array(x,y):
+	accu_arr_row, accu_arr_col = accumulator_array.shape
+	return True if ( x >= 0 and x < accu_arr_row and y >= 0 and y < accu_arr_col ) else False
 
 def accumulator_is_local_maxima( i, j ):
 	if accumulator_array[i][j] == 0: # already surpressed
 		return False
 	for s_i in range( (-1)*window_size, window_size + 1 ):
 		for s_j in range( (-1)*window_size, window_size + 1 ):
-			if accumulator_array[i][j] < accumulator_array[ i + s_i ][ j + s_j ]: # Notice that there might be more than one maxima
-				return False
+			local_x = i+ s_i
+			local_y = j+ s_j
+			if xy_in_range_of_accumulator_array( local_x, local_y ):
+				if accumulator_array[i][j] < accumulator_array[ local_x ][ local_y ]: # Notice that there might be more than one maxima
+					return False
 	return True
 
-for i in range( window_size, accu_row - window_size):
-	for j in range( window_size, accu_col - window_size):
+for i in range( 0, accu_row):
+	for j in range( 0, accu_col):
 		#apply the threshold filter
 		if accumulator_is_local_maxima( i, j ):
 			peak_p = (j + 0.5) * p_step_size
 			peak_theta = (i + 0.5) * theta_step_size
 			peak_list.append([peak_theta, peak_p])
 
+
+# def accumulator_is_local_maxima( i, j ):
+# 	if accumulator_array[i][j] == 0: # already surpressed
+# 		return False
+# 	for s_i in range( (-1)*window_size, window_size + 1 ):
+# 		for s_j in range( (-1)*window_size, window_size + 1 ):
+# 			if accumulator_array[i][j] < accumulator_array[ i + s_i ][ j + s_j ]: # Notice that there might be more than one maxima
+# 				return False
+# 	return True
+
+# for i in range( window_size, accu_row - window_size):
+# 	for j in range( window_size, accu_col - window_size):
+# 		#apply the threshold filter
+# 		if accumulator_is_local_maxima( i, j ):
+# 			peak_p = (j + 0.5) * p_step_size
+# 			peak_theta = (i + 0.5) * theta_step_size
+# 			peak_list.append([peak_theta, peak_p])
+
 print("peak_list: ")
 print( peak_list )
 
+peak_list = peaks_found
 
 #################################################################################################
 # Filter overlaping lines
@@ -367,12 +416,15 @@ def draw_line(i_theta, i_p):
 #Draw the lines in edge_map
 # print("Peak includes:")
 # print( peak )
-for line in peak_list:
+for line in peak_list_filtered:
 	draw_line( line[0], line[1] )
 plt.imshow( edge_map, cmap = "gray")
-plt.show()
-# plt.savefig("maskedImage.png")
+#plt.show()
+plt.savefig("image_with_all_straight_lines_detected.png")
 plt.close()
+
+
+# sys.exit()
 
 #############################################################################################
 # Extract line segments
