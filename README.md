@@ -25,3 +25,6 @@ Python, C/C++, Matlab and Java are the recommended programming languages. If you
 * You are not allowed to use the Convolution or Cross-Correlation built-in library function of any programming language. You have to write your own function. 
 * You are allowed to use  Read, Write, and Display images library functions. 
 * There are 3 sets of test images attached. Each image is available in both .jpg and .raw formats. See Project Description for a description of the .raw format. TestImage1c and Testimage2c are of dimension 756 rows x 1008 columns, and Testimage3 has dimension 413 rows x 550 columns. 
+
+## Follow up
+A optimized version of the implementation is [Image_Processing_Optimization](https://github.com/stella0316/Image_Processing_Optimization), in which techniques such as built-in functions, Numpy/vectorizing, Itertools, Cython, Numba, etc. are heavily utilized to speed it up, by [@stella0316](https://github.com/stella0316), [@Ksenia](https://github.com/ksenialearn) and [@googlr](https://github.com/googlr).
